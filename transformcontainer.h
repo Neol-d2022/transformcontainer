@@ -71,6 +71,13 @@ void TCTravase(TC_t *tc, void *param, void (*handler)(void *data, void *param));
 /* Complexity is O(n), where n is the number of data stored */
 int TCUndoTransform(TC_t *tc);
 
+/* Copy from one container to another */
+/* Parameter src should be initialized, of course */
+/* Parameter dst should be INITIALIZED */
+/* You may have to make a call to TCTravase to duplicate data in the dst container */
+/* ABORT ON ANY ERROR */
+void TCCopy(TC_t *dst, TC_t *src);
+
 /* Remove all parameter checks of functions above to decrease CPU usage */
 /* Use it at your own risk */
 //#define _TC_PRODUCTION

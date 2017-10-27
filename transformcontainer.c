@@ -22,6 +22,8 @@ static void _TCTransformTraverser(void *data, void *param);
 static void _TCUndoTransformTraverser(void *data, void *param);
 static void _TCTravaseL(TC_t *tc, void *param, void (*handler)(void *data, void *param));
 static void _TCTravaseA(TC_t *tc, void *param, void (*handler)(void *data, void *param));
+static void _TCCopyALTraverser(void *data, void *param);
+static void _TCCopyLXTraverser(void *data, void *param);
 
 // ================
 // Exported functions
@@ -35,20 +37,16 @@ void TCDeInit(TC_t *tc)
 {
 #ifdef _TC_PRODUCTION
     if (tc->fixed)
-        _TCClearLinkedList(tc);
-    else
-        _TCClearArray(tc);
 #else
-    if (!TCIsTransformed(tc))
-        _TCClearLinkedList(tc);
-    else
+    if (TCIsTransformed(tc))
+#endif
         _TCClearArray(tc);
+    else
+        _TCClearLinkedList(tc);
 
 #ifdef _TC_DEBUG
     memset(tc, 0xab, sizeof(*tc));
-#endif // #ifdef _TC_DEBUG
-
-#endif // #ifdef _TC_PRODUCTION
+#endif
 }
 
 int TCAdd(TC_t *tc, void *data)
@@ -79,6 +77,8 @@ int TCTransform(TC_t *tc)
 
 #ifndef _TC_PRODUCTION
     if (TCIsTransformed(tc))
+        return 1;
+    if (tc->variableCount == 0)
         return 1;
 #endif
 
@@ -133,15 +133,12 @@ void TCTravase(TC_t *tc, void *param, void (*handler)(void *data, void *param))
 
 #ifdef _TC_PRODUCTION
     if (tc->fixed)
-        _TCTravaseA(tc, param, handler);
-    else
-        _TCTravaseL(tc, param, handler);
 #else
     if (TCIsTransformed(tc))
+#endif
         _TCTravaseA(tc, param, handler);
     else
         _TCTravaseL(tc, param, handler);
-#endif
 }
 
 int TCUndoTransform(TC_t *tc)
@@ -161,6 +158,35 @@ int TCUndoTransform(TC_t *tc)
     tc->fixedCount = 0;
 
     return 0;
+}
+
+void TCCopy(TC_t *dst, TC_t *src)
+{
+#ifndef _TC_PRODUCTION
+    if (TCIsTransformed(dst))
+#else
+    if (dst->fixed)
+#endif
+    {
+#ifndef _TC_PRODUCTION
+        if (TCIsTransformed(src))
+#else
+        if (src->fixed)
+#endif
+        {
+
+            dst->fixed = (void **)Mrealloc(dst->fixed, sizeof(*(dst->fixed)) * (dst->fixedCount + src->fixedCount));
+            memcpy(dst->fixed + dst->fixedCount, src->fixed, sizeof(*(dst->fixed)) * src->fixedCount);
+            dst->fixedCount += src->fixedCount;
+        }
+        else
+        {
+            dst->fixed = (void **)Mrealloc(dst->fixed, sizeof(*(dst->fixed)) * (dst->fixedCount + src->variableCount));
+            _TCTravaseL(src, dst, _TCCopyALTraverser);
+        }
+    }
+    else
+        TCTravase(src, dst, _TCCopyLXTraverser);
 }
 
 // =================
@@ -217,4 +243,18 @@ static void _TCTravaseA(TC_t *tc, void *param, void (*handler)(void *data, void 
 
     for (i = 0; i < n; i += 1)
         handler((tc->fixed)[i], param);
+}
+
+static void _TCCopyALTraverser(void *data, void *param)
+{
+    TC_t *dst = (TC_t *)param;
+
+    dst->fixed[dst->fixedCount++] = data;
+}
+
+static void _TCCopyLXTraverser(void *data, void *param)
+{
+    TC_t *dst = (TC_t *)param;
+
+    TCAdd(dst, data);
 }
