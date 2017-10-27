@@ -67,7 +67,7 @@ void TCTravase(TC_t *tc, void *param, void (*handler)(void *data, void *param));
 /* To make the TC object able to store more data */
 /* If the TC object has not been transformed yet, 1 is returned, indicating an error */
 /* This function returns 0 on success */
-/* Frequently transform and undo it will may be costly */
+/* Frequently transform and undo it may be costly */
 /* Complexity is O(n), where n is the number of data stored */
 int TCUndoTransform(TC_t *tc);
 
