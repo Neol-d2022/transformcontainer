@@ -1,7 +1,25 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "transformcontainer.h"
 #include "mm.h"
+
+static void *duplicator(void *srcData, void *param)
+{
+    size_t l;
+
+    l = strlen((char *)srcData);
+    param = Mmalloc(l + 1);
+    ((char *)param)[l] = '\0';
+    memcpy(param, srcData, l);
+
+    return param;
+}
+
+static void releaser(void *data, void *param)
+{
+    Mfree(param = data);
+}
 
 /* Test script */
 int main(int argc, char **argv)
@@ -38,34 +56,36 @@ int main(int argc, char **argv)
 
     TCUndoTransform(&tc);
     TCInit(&dst);
-    TCCopy(&dst, &tc);
-    printf("TCCopy test (LL), count = %u, MDEBUG = %u\n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
+    TCCopyX(&dst, &tc, NULL, duplicator);
+    printf("TCCopyX test (LL), count = %u, MDEBUG = %u\n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
+    TCTravase(&dst, NULL, releaser);
     TCDeInit(&dst);
 
     TCTransform(&tc);
     TCInit(&dst);
-    TCCopy(&dst, &tc);
-    printf("TCCopy test (LA), count = %u, MDEBUG = %u\n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
+    TCCopyX(&dst, &tc, NULL, duplicator);
+    printf("TCCopyX test (LA), count = %u, MDEBUG = %u\n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
+    TCTravase(&dst, NULL, releaser);
     TCDeInit(&dst);
 
     TCUndoTransform(&tc);
     TCInit(&dst);
-    TCAdd(&dst, "Padding");
     TCTransform(&dst);
-    TCCopy(&dst, &tc);
-    printf("TCCopy test (AL), count = %u, MDEBUG = %u, contains = \n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
-    for (j = 0; j < k + 1; j += 1)
+    TCCopyX(&dst, &tc, NULL, duplicator);
+    printf("TCCopyX test (AL), count = %u, MDEBUG = %u, contains = \n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
+    for (j = 0; j < k; j += 1)
         printf("%s\n", (char *)TCI(&dst, j));
+    TCTravase(&dst, NULL, releaser);
     TCDeInit(&dst);
 
     TCTransform(&tc);
     TCInit(&dst);
-    TCAdd(&dst, "Padding");
     TCTransform(&dst);
-    TCCopy(&dst, &tc);
-    printf("TCCopy test (AA), count = %u, MDEBUG = %u, contains = \n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
-    for (j = 0; j < k + 1; j += 1)
+    TCCopyX(&dst, &tc, NULL, duplicator);
+    printf("TCCopyX test (AA), count = %u, MDEBUG = %u, contains = \n", (unsigned int)TCCount(&dst), (unsigned int)MDebug());
+    for (j = 0; j < k; j += 1)
         printf("%s\n", (char *)TCI(&dst, j));
+    TCTravase(&dst, NULL, releaser);
     TCDeInit(&dst);
 
     TCDeInit(&tc);

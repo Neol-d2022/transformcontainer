@@ -75,8 +75,14 @@ int TCUndoTransform(TC_t *tc);
 /* Parameter src should be initialized, of course */
 /* Parameter dst should be INITIALIZED */
 /* You may have to make a call to TCTravase to duplicate data in the dst container */
-/* ABORT ON ANY ERROR */
 void TCCopy(TC_t *dst, TC_t *src);
+
+/* Copy from one container to another */
+/* Parameter src should be initialized, of course */
+/* Parameter dst should be INITIALIZED */
+/* Parameter param is the one which will be passed to dataDuplicator */
+/* Parameter dataDuplicator should return a pointer to duplicated object from soucreData, can be NULL */
+void TCCopyX(TC_t *dst, TC_t *src, void *param, void *(*dataDuplicator)(void *soucreData, void *param));
 
 /* Remove all parameter checks of functions above to decrease CPU usage */
 /* Use it at your own risk */
