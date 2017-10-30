@@ -29,8 +29,10 @@ static void _TCTransformTraverser(void *data, void *param);
 static void _TCUndoTransformTraverser(void *data, void *param);
 static void _TCTravaseL(TC_t *tc, void *param, void (*handler)(void *data, void *param));
 static void _TCTravaseA(TC_t *tc, void *param, void (*handler)(void *data, void *param));
-static void _TCCopyXALTraverser(void *data, void *param);
-static void _TCCopyXLXTraverser(void *data, void *param);
+static void _TCCopyXALTraverserC(void *data, void *param);
+static void _TCCopyXLXTraverserC(void *data, void *param);
+static void _TCCopyXALTraverserD(void *data, void *param);
+static void _TCCopyXLXTraverserD(void *data, void *param);
 
 // ================
 // Exported functions
@@ -43,7 +45,7 @@ void TCInit(TC_t *tc)
 void TCDeInit(TC_t *tc)
 {
 #ifdef _TC_PRODUCTION
-    if (tc->fixed)
+    if (tc->flags & _TC_TRANSFORMED_FLAG)
 #else
     if (TCIsTransformed(tc))
 #endif
@@ -98,7 +100,6 @@ int TCTransform(TC_t *tc)
     _TCClearLinkedList(tc);
     tc->fixed = a;
     tc->fixedCount = n;
-    tc->variableHead = NULL;
     tc->variableCount = 0;
     tc->flags |= _TC_TRANSFORMED_FLAG;
 
@@ -140,7 +141,7 @@ void TCTravase(TC_t *tc, void *param, void (*handler)(void *data, void *param))
 {
 
 #ifdef _TC_PRODUCTION
-    if (tc->fixed)
+    if (tc->flags & _TC_TRANSFORMED_FLAG)
 #else
     if (TCIsTransformed(tc))
 #endif
@@ -162,7 +163,6 @@ int TCUndoTransform(TC_t *tc)
     tc->variableCount = 0;
     _TCTravaseA(tc, tc, _TCUndoTransformTraverser);
     _TCClearArray(tc);
-    tc->fixed = NULL;
     tc->fixedCount = 0;
 
     return 0;
@@ -181,13 +181,13 @@ void TCCopyX(TC_t *dst, TC_t *src, void *param, void *(*dataDuplicator)(void *so
 #ifndef _TC_PRODUCTION
     if (TCIsTransformed(dst))
 #else
-    if (dst->fixed)
+    if (dst->flags & _TC_TRANSFORMED_FLAG)
 #endif
     {
 #ifndef _TC_PRODUCTION
         if (TCIsTransformed(src))
 #else
-        if (src->fixed)
+        if (src->flags & _TC_TRANSFORMED_FLAG)
 #endif
         {
             n = dst->fixedCount + src->fixedCount;
@@ -203,17 +203,27 @@ void TCCopyX(TC_t *dst, TC_t *src, void *param, void *(*dataDuplicator)(void *so
         {
             dst->fixed = (void **)Mrealloc(dst->fixed, sizeof(*(dst->fixed)) * (dst->fixedCount + src->variableCount));
             io.dst = dst;
-            io.param = param;
-            io.dataDuplicator = dataDuplicator;
-            _TCTravaseL(src, &io, _TCCopyXALTraverser);
+            if (dataDuplicator)
+            {
+                io.param = param;
+                io.dataDuplicator = dataDuplicator;
+                _TCTravaseL(src, &io, _TCCopyXALTraverserD);
+            }
+            else
+                _TCTravaseL(src, &io, _TCCopyXALTraverserC);
         }
     }
     else
     {
         io.dst = dst;
-        io.param = param;
-        io.dataDuplicator = dataDuplicator;
-        TCTravase(src, &io, _TCCopyXLXTraverser);
+        if (dataDuplicator)
+        {
+            io.param = param;
+            io.dataDuplicator = dataDuplicator;
+            TCTravase(src, &io, _TCCopyXLXTraverserD);
+        }
+        else
+            TCTravase(src, &io, _TCCopyXLXTraverserC);
     }
 }
 
@@ -273,22 +283,30 @@ static void _TCTravaseA(TC_t *tc, void *param, void (*handler)(void *data, void 
         handler((tc->fixed)[i], param);
 }
 
-static void _TCCopyXALTraverser(void *data, void *param)
+static void _TCCopyXALTraverserC(void *data, void *param)
 {
     _TCCopyX_internal_object_t *io = (_TCCopyX_internal_object_t *)param;
 
-    if (io->dataDuplicator)
-        io->dst->fixed[io->dst->fixedCount++] = io->dataDuplicator(data, io->param);
-    else
-        io->dst->fixed[io->dst->fixedCount++] = data;
+    io->dst->fixed[io->dst->fixedCount++] = data;
 }
 
-static void _TCCopyXLXTraverser(void *data, void *param)
+static void _TCCopyXLXTraverserC(void *data, void *param)
 {
     _TCCopyX_internal_object_t *io = (_TCCopyX_internal_object_t *)param;
 
-    if (io->dataDuplicator)
-        TCAdd(io->dst, io->dataDuplicator(data, io->param));
-    else
-        TCAdd(io->dst, data);
+    TCAdd(io->dst, data);
+}
+
+static void _TCCopyXALTraverserD(void *data, void *param)
+{
+    _TCCopyX_internal_object_t *io = (_TCCopyX_internal_object_t *)param;
+
+    io->dst->fixed[io->dst->fixedCount++] = io->dataDuplicator(data, io->param);
+}
+
+static void _TCCopyXLXTraverserD(void *data, void *param)
+{
+    _TCCopyX_internal_object_t *io = (_TCCopyX_internal_object_t *)param;
+
+    TCAdd(io->dst, io->dataDuplicator(data, io->param));
 }
