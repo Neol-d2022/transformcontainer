@@ -39,7 +39,7 @@ static void _TCCopyXLXTraverserD(void *data, void *param);
 void TCInit(TC_t *tc)
 {
     memset(tc, 0, sizeof(*tc));
-    tc->lastNodeLinkPtr = &(tc->variableHead);
+    tc->variableStorage.lastNodeLinkPtr = &(tc->variableStorage.head);
 }
 
 void TCDeInit(TC_t *tc)
@@ -67,13 +67,13 @@ int TCAdd(TC_t *tc, void *data)
         return 1;
 #endif
 
-    pp = tc->lastNodeLinkPtr;
+    pp = tc->variableStorage.lastNodeLinkPtr;
     n = (TC_Node_t *)Mmalloc(sizeof(*n));
     n->data = data;
     n->next = *pp;
     *pp = n;
-    tc->lastNodeLinkPtr = &(n->next);
-    tc->variableCount += 1;
+    tc->variableStorage.lastNodeLinkPtr = &(n->next);
+    tc->count += 1;
 
     return 0;
 }
@@ -89,7 +89,7 @@ int TCTransform(TC_t *tc)
         return 1;
 #endif
 
-    n = tc->variableCount;
+    n = tc->count;
     if (n == 0)
         a = (void **)Mmalloc(sizeof(*a) * 1);
     else
@@ -98,9 +98,7 @@ int TCTransform(TC_t *tc)
     io.index = 0;
     _TCTravaseL(tc, &io, _TCTransformTraverser);
     _TCClearLinkedList(tc);
-    tc->fixed = a;
-    tc->fixedCount = n;
-    tc->variableCount = 0;
+    tc->fixedStorage.storage = a;
     tc->flags |= _TC_TRANSFORMED_FLAG;
 
     return 0;
@@ -116,14 +114,7 @@ bool TCIsTransformed(TC_t *tc)
 
 size_t TCCount(TC_t *tc)
 {
-#ifdef _TC_PRODUCTION
-    return tc->fixedCount + tc->variableCount;
-#else
-    if (TCIsTransformed(tc))
-        return tc->fixedCount;
-    else
-        return tc->variableCount;
-#endif
+    return tc->count;
 }
 
 void *TCI(TC_t *tc, size_t i)
@@ -131,10 +122,10 @@ void *TCI(TC_t *tc, size_t i)
 #ifndef _TC_PRODUCTION
     if (!TCIsTransformed(tc))
         abort();
-    if (i >= tc->fixedCount)
+    if (i >= tc->count)
         abort();
 #endif
-    return (tc->fixed)[i];
+    return (tc->fixedStorage.storage)[i];
 }
 
 void TCTravase(TC_t *tc, void *param, void (*handler)(void *data, void *param))
@@ -152,18 +143,24 @@ void TCTravase(TC_t *tc, void *param, void (*handler)(void *data, void *param))
 
 int TCUndoTransform(TC_t *tc)
 {
+    TC_t tmp;
+
 #ifndef _TC_PRODUCTION
     if (!TCIsTransformed(tc))
         return 1;
 #endif
 
+    tmp.flags = _TC_TRANSFORMED_FLAG;
+    tmp.fixedStorage.storage = tc->fixedStorage.storage;
+    tmp.count = tc->count;
+
     tc->flags &= !_TC_TRANSFORMED_FLAG;
-    tc->variableHead = NULL;
-    tc->lastNodeLinkPtr = &(tc->variableHead);
-    tc->variableCount = 0;
-    _TCTravaseA(tc, tc, _TCUndoTransformTraverser);
-    _TCClearArray(tc);
-    tc->fixedCount = 0;
+    tc->variableStorage.head = NULL;
+    tc->variableStorage.lastNodeLinkPtr = &(tc->variableStorage.head);
+    tc->count = 0;
+    _TCTravaseA(&tmp, tc, _TCUndoTransformTraverser);
+
+    _TCClearArray(&tmp);
 
     return 0;
 }
@@ -190,18 +187,18 @@ void TCCopyX(TC_t *dst, TC_t *src, void *param, void *(*dataDuplicator)(void *so
         if (src->flags & _TC_TRANSFORMED_FLAG)
 #endif
         {
-            n = dst->fixedCount + src->fixedCount;
-            dst->fixed = (void **)Mrealloc(dst->fixed, sizeof(*(dst->fixed)) * n);
+            n = dst->count + src->count;
+            dst->fixedStorage.storage = (void **)Mrealloc(dst->fixedStorage.storage, sizeof(*(dst->fixedStorage.storage)) * n);
             if (dataDuplicator)
-                for (i = 0; i < src->fixedCount; i += 1)
-                    (dst->fixed)[i + dst->fixedCount] = dataDuplicator((src->fixed)[i], param);
+                for (i = 0; i < src->count; i += 1)
+                    (dst->fixedStorage.storage)[i + dst->count] = dataDuplicator((src->fixedStorage.storage)[i], param);
             else
-                memcpy(dst->fixed + dst->fixedCount, src->fixed, sizeof(*(dst->fixed)) * src->fixedCount);
-            dst->fixedCount = n;
+                memcpy(dst->fixedStorage.storage + dst->count, src->fixedStorage.storage, sizeof(*(dst->fixedStorage.storage)) * src->count);
+            dst->count = n;
         }
         else
         {
-            dst->fixed = (void **)Mrealloc(dst->fixed, sizeof(*(dst->fixed)) * (dst->fixedCount + src->variableCount));
+            dst->fixedStorage.storage = (void **)Mrealloc(dst->fixedStorage.storage, sizeof(*(dst->fixedStorage.storage)) * (dst->count + src->count));
             io.dst = dst;
             if (dataDuplicator)
             {
@@ -233,7 +230,7 @@ static void _TCClearLinkedList(TC_t *tc)
 {
     TC_Node_t *c, *d;
 
-    c = tc->variableHead;
+    c = tc->variableStorage.head;
 
     while (c)
     {
@@ -245,7 +242,7 @@ static void _TCClearLinkedList(TC_t *tc)
 
 static void _TCClearArray(TC_t *tc)
 {
-    Mfree(tc->fixed);
+    Mfree(tc->fixedStorage.storage);
 }
 
 static void _TCTransformTraverser(void *data, void *param)
@@ -264,7 +261,7 @@ static void _TCUndoTransformTraverser(void *data, void *param)
 
 static void _TCTravaseL(TC_t *tc, void *param, void (*handler)(void *data, void *param))
 {
-    TC_Node_t *c = tc->variableHead;
+    TC_Node_t *c = tc->variableStorage.head;
 
     while (c)
     {
@@ -277,17 +274,17 @@ static void _TCTravaseA(TC_t *tc, void *param, void (*handler)(void *data, void 
 {
     size_t i, n;
 
-    n = tc->fixedCount;
+    n = tc->count;
 
     for (i = 0; i < n; i += 1)
-        handler((tc->fixed)[i], param);
+        handler((tc->fixedStorage.storage)[i], param);
 }
 
 static void _TCCopyXALTraverserC(void *data, void *param)
 {
     _TCCopyX_internal_object_t *io = (_TCCopyX_internal_object_t *)param;
 
-    io->dst->fixed[io->dst->fixedCount++] = data;
+    io->dst->fixedStorage.storage[io->dst->count++] = data;
 }
 
 static void _TCCopyXLXTraverserC(void *data, void *param)
@@ -301,7 +298,7 @@ static void _TCCopyXALTraverserD(void *data, void *param)
 {
     _TCCopyX_internal_object_t *io = (_TCCopyX_internal_object_t *)param;
 
-    io->dst->fixed[io->dst->fixedCount++] = io->dataDuplicator(data, io->param);
+    io->dst->fixedStorage.storage[io->dst->count++] = io->dataDuplicator(data, io->param);
 }
 
 static void _TCCopyXLXTraverserD(void *data, void *param)

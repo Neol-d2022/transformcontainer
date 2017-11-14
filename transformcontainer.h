@@ -12,11 +12,22 @@ typedef struct TC_Node_struct_t
 
 typedef struct
 {
-    void **fixed;
-    size_t fixedCount;
-    TC_Node_t *variableHead;
+    void **storage;
+} _fixedStorage_t;
+
+typedef struct
+{
+    TC_Node_t *head;
     TC_Node_t **lastNodeLinkPtr;
-    size_t variableCount;
+} _variableStorage_t;
+
+typedef struct
+{
+    union {
+        _fixedStorage_t fixedStorage;
+        _variableStorage_t variableStorage;
+    };
+    size_t count;
     unsigned char flags;
 } TC_t;
 /* Transform Container */
